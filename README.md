@@ -65,7 +65,7 @@ Extract anywhere you like.
 Set two required environment variables:
 
 ### Linux/macOS
-```bash
+
 export SERIALMEMORY_ENDPOINT="https://api.serialmemory.dev"
 export SERIALMEMORY_API_KEY="your-api-key"
 
