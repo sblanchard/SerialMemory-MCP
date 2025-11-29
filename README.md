@@ -1,30 +1,51 @@
 # SerialMemory MCP Client
 
-A lightweight, open-source **Model Context Protocol (MCP)** client for SerialMemory.  
-This MCP exposes your SerialMemory workspace to AI models (Claude, Cursor, VS Code agents, etc.).
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+![.NET](https://img.shields.io/badge/.NET-10-blueviolet)
+![Status](https://img.shields.io/badge/MCP-Compatible-brightgreen)
+![Docker](https://img.shields.io/badge/Docker-ready-0db7ed.svg)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Mac-informational)
 
-The MCP Client **stores no data**, contains **zero business logic**, and simply proxies requests from your AI assistant → to your SerialMemory account → and returns results.
+A lightweight, open-source **Model Context Protocol (MCP)** client that connects
+developer tools (Claude Desktop, Cursor, Windsurf, VS Code MCP extensions) to your SerialMemory backend.
+
+This MCP client contains **no business logic**.
+It is a **thin, secure HTTP proxy** that forwards tool requests to your SerialMemory Server.
 
 ---
 
 ## ✨ Features
 
-- **Pure MCP Spec Implementation**  
-  Works with any MCP-compatible model (Claude Desktop, ChatGPT MCP, Cursor AI, Cline, Windsurf).
+- ⚡ **Zero-logic proxy** (forwards all MCP requests to your API)
+- 🔐 **API-key secured**
+- 📦 **No database access, no local AI models**
+- 🐳 **Docker-ready**
+- 🛠 **Works with all MCP-compatible tools**
+  - Claude Desktop (**official first-class support**)
+  - Cursor
+  - Windsurf
+  - VS Code + Cline
 
-- **Zero Backend Logic**  
-  This client performs *no database reads, no Npgsql, no Redis, no Dapper*.  
-  All logic executes on your SerialMemory backend via secure API.
+---
 
-- **Secure API Forwarding**  
-  - Sends MCP tool calls to:  
-    `POST /api/mcp/tools/{toolName}`
-  - Includes your API key in every request.
-  - Validates structured request/response format.
+## 🚀 Quick Start
 
-- **Simple Docker Deployment**  
-  Standard:  
-  ```sh
-  docker run -it \
-    -e SERIALMEMORY_API_KEY=your-key \
-    ghcr.io/sblanchard/serialmemory-mcp
+### 1. Get your SerialMemory API Key  
+Sign up at:
+
+**https://serialmemory.dev**
+
+You will receive:  
+- Email verification  
+- API key  
+- Developer dashboard access  
+
+---
+
+### 2. Run the MCP Client
+
+```sh
+docker run -it \
+  -e SERIALMEMORY_ENDPOINT="https://api.serialmemory.com" \
+  -e SERIALMEMORY_API_KEY="your-api-key" \
+  serialcoder/serialmemory-mcp
