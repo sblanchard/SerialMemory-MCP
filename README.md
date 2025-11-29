@@ -1,51 +1,70 @@
-# SerialMemory MCP Client
+# SerialMemory MCP Client  
+Official **Model Context Protocol (MCP) client** for connecting the SerialMemory Cloud Platform to tools like **Claude Desktop**, **Cursor**, **Kilo Code**, and any MCP runtime.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-![.NET](https://img.shields.io/badge/.NET-10-blueviolet)
-![Status](https://img.shields.io/badge/MCP-Compatible-brightgreen)
-![Docker](https://img.shields.io/badge/Docker-ready-0db7ed.svg)
-![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Mac-informational)
+![GitHub Release](https://img.shields.io/github/v/release/sblanchard/SerialMemory-MCP)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Platform](https://img.shields.io/badge/.NET-10-blueviolet)
+![MCP Compatible](https://img.shields.io/badge/MCP-2024--11--05-black)
+![Docker](https://img.shields.io/badge/docker-supported-2496ED)
+![Kilo Code](https://img.shields.io/badge/Kilo%20Code-MCP%20Compatible-orange)
 
-A lightweight, open-source **Model Context Protocol (MCP)** client that connects
-developer tools (Claude Desktop, Cursor, Windsurf, VS Code MCP extensions) to your SerialMemory backend.
+---
 
-This MCP client contains **no business logic**.
-It is a **thin, secure HTTP proxy** that forwards tool requests to your SerialMemory Server.
+## 🚀 Overview
+
+This repository contains the **official lightweight MCP client** for SerialMemory.
+
+The MCP client:
+
+- Provides all SerialMemory tools to AI IDEs and assistants  
+- Contains **zero backend logic**  
+- Proxies all requests to:  
+  **https://api.serialmemory.dev**
+- Works with:
+  - Claude Desktop
+  - Cursor
+  - Kilo Code
+  - IntelliJ / VSCode MCP plugins
+  - Any STDIO-based MCP runtime
+
+No databases, no embeddings, no ML, no Redis — all intelligence is in the **SerialMemory platform**.
 
 ---
 
 ## ✨ Features
 
-- ⚡ **Zero-logic proxy** (forwards all MCP requests to your API)
-- 🔐 **API-key secured**
-- 📦 **No database access, no local AI models**
-- 🐳 **Docker-ready**
-- 🛠 **Works with all MCP-compatible tools**
-  - Claude Desktop (**official first-class support**)
-  - Cursor
-  - Windsurf
-  - VS Code + Cline
+- ✔ Full MCP compatibility (2024-11-05 spec)
+- ✔ Works out of the box with Claude / Cursor / Kilo Code  
+- ✔ Cross-platform: Windows, macOS, Linux  
+- ✔ Docker-ready  
+- ✔ Secure API-key authentication  
+- ✔ Extremely lightweight (<300 LOC)  
+- ✔ No state stored locally  
+- ✔ Safe for public distribution  
 
 ---
 
-## 🚀 Quick Start
+## 📦 Installation
 
-### 1. Get your SerialMemory API Key  
-Sign up at:
+### 1. Download release
 
-**https://serialmemory.dev**
+https://github.com/sblanchard/SerialMemory-MCP/releases
 
-You will receive:  
-- Email verification  
-- API key  
-- Developer dashboard access  
+Choose:
+
+- Windows: `serialmemory-mcp-win-x64.zip`
+- macOS ARM: `serialmemory-mcp-macos-arm64.tar.gz`
+- Linux: `serialmemory-mcp-linux-x64.tar.gz`
+
+Extract anywhere you like.
 
 ---
 
-### 2. Run the MCP Client
+## ⚙️ Configuration
 
-```sh
-docker run -it \
-  -e SERIALMEMORY_ENDPOINT="https://api.serialmemory.com" \
-  -e SERIALMEMORY_API_KEY="your-api-key" \
-  serialcoder/serialmemory-mcp
+Set two required environment variables:
+
+### Linux/macOS
+```bash
+export SERIALMEMORY_ENDPOINT="https://api.serialmemory.dev"
+export SERIALMEMORY_API_KEY="your-api-key"
