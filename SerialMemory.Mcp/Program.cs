@@ -1,3 +1,4 @@
+```csharp
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -8,42 +9,31 @@ using Microsoft.Extensions.Logging;
 using SerialMemory.Mcp.Tools;
 
 // ============================================================================
-// SerialMemory MCP Client - Thin HTTP Proxy
+// SerialMemory MCP Client - PUBLIC DISTRIBUTION BUILD
 // ============================================================================
-// This is a THIN CLIENT that forwards all tool calls to SerialMemory.Api.
-// It contains NO backend logic - no database, no embeddings, no reasoning.
-// ============================================================================
-
-#region Configuration
-
+ 
 var configuration = new ConfigurationBuilder()
-    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
-    .AddJsonFile(Path.Combine(AppContext.BaseDirectory, "appsettings.json"), optional: true, reloadOnChange: false)
+    .AddJsonFile("appsettings.json", optional: true)
     .AddEnvironmentVariables()
     .Build();
 
-// Required: API endpoint and key
+// Required configuration
 var apiEndpoint = configuration["SERIALMEMORY_ENDPOINT"]?.TrimEnd('/');
 var apiKey = configuration["SERIALMEMORY_API_KEY"];
 
-if (string.IsNullOrEmpty(apiEndpoint))
+if (string.IsNullOrWhiteSpace(apiEndpoint))
 {
-    await Console.Error.WriteLineAsync("[MCP Error] SERIALMEMORY_ENDPOINT is required (e.g., https://api.serialmemory.com)");
-    Environment.Exit(1);
+    Console.Error.WriteLine("[MCP Error] Missing SERIALMEMORY_ENDPOINT");
     return;
 }
 
-if (string.IsNullOrEmpty(apiKey))
+if (string.IsNullOrWhiteSpace(apiKey))
 {
-    await Console.Error.WriteLineAsync("[MCP Error] SERIALMEMORY_API_KEY is required");
-    Environment.Exit(1);
+    Console.Error.WriteLine("[MCP Error] Missing SERIALMEMORY_API_KEY");
     return;
 }
 
-#endregion
-
-#region HTTP Client Setup
-
+// HTTP Client ---------------------------------------------------------------
 using var httpClient = new HttpClient
 {
     BaseAddress = new Uri(apiEndpoint),
@@ -52,64 +42,65 @@ using var httpClient = new HttpClient
 
 httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("SerialMemory-MCP/1.0");
 
-#endregion
-
-#region Logging
-
+// Logging -------------------------------------------------------------------
 using var loggerFactory = LoggerFactory.Create(builder =>
 {
-    builder.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
+    builder.AddConsole();
     builder.SetMinimumLevel(LogLevel.Information);
 });
 var logger = loggerFactory.CreateLogger("SerialMemory.Mcp");
+logger.LogInformation("SerialMemory MCP Client starting → {Endpoint}", apiEndpoint);
 
-logger.LogInformation("SerialMemory MCP Client starting");
-logger.LogInformation("API Endpoint: {Endpoint}", apiEndpoint);
-
-#endregion
-
-#region JSON Serialization
-
+// JSON Options --------------------------------------------------------------
 var jsonOptions = new JsonSerializerOptions
 {
     PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-    WriteIndented = false,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
 };
 
-#endregion
-
-#region MCP STDIO Protocol
-
-await using var stdin = Console.OpenStandardInput();
-await using var stdout = Console.OpenStandardOutput();
-using var reader = new StreamReader(stdin);
-await using var writer = new StreamWriter(stdout) { AutoFlush = true };
+// MCP STDIO Loop ------------------------------------------------------------
+using var reader = new StreamReader(Console.OpenStandardInput());
+using var writer = new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
 
 while (await reader.ReadLineAsync() is { } line)
 {
-    if (string.IsNullOrWhiteSpace(line)) continue;
+    if (string.IsNullOrWhiteSpace(line))
+        continue;
 
     try
     {
-        var request = JsonNode.Parse(line);
-        if (request == null) continue;
-
-        var id = request["id"];
-        var method = request["method"]?.GetValue<string>();
-        var @params = request["params"];
-
-        logger.LogDebug("Received: {Method}", method);
+        var req = JsonNode.Parse(line);
+        var id = req?["id"];
+        var method = req?["method"]?.GetValue<string>();
+        var @params = req?["params"];
 
         object? result = method switch
         {
-            "initialize" => HandleInitialize(),
-            "notifications/initialized" => null,
-            "tools/list" => HandleToolsList(),
-            "resources/list" => HandleResourcesList(),
-            "resources/read" => await ForwardToApi("resources/read", @params),
-            "tools/call" => await HandleToolsCall(@params),
+            "initialize" => new
+            {
+                protocolVersion = "2024-11-05",
+                serverInfo = new { name = "serialmemory-mcp", version = "1.0.0" },
+                capabilities = new { tools = new { }, resources = new { } }
+            },
+
+            "shutdown" => null,
+            "exit" => Environment.Exit(0),
+
+            "tools/list" => new { tools = ToolDefinitions.GetAllTools() },
+
+            "resources/list" => new
+            {
+                resources = new object[]
+                {
+                    new { uri="memory://recent", name="Recent Memories", mimeType="application/json" },
+                    new { uri="memory://sessions", name="Conversation Sessions", mimeType="application/json" }
+                }
+            },
+
+            "tools/call" => await ForwardToApi("mcp/tools", @params),
+
             _ => null
         };
 
@@ -127,158 +118,49 @@ while (await reader.ReadLineAsync() is { } line)
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Error processing request");
+        logger.LogError(ex, "MCP request error");
         await Console.Error.WriteLineAsync($"[MCP Error] {ex.Message}");
     }
 }
 
-#endregion
-
-#region Protocol Handlers
-
-object HandleInitialize()
+// Forwarding Logic ----------------------------------------------------------
+async Task<object> ForwardToApi(string basePath, JsonNode? payload)
 {
-    return new
-    {
-        protocolVersion = "2024-11-05",
-        serverInfo = new
-        {
-            name = "serialmemory-client",
-            version = "3.0.0"
-        },
-        capabilities = new
-        {
-            tools = new { },
-            resources = new { }
-        }
-    };
-}
+    var toolName = payload?["name"]?.GetValue<string>();
+    var args = payload?["arguments"];
 
-object HandleToolsList()
-{
-    return new { tools = ToolDefinitions.GetAllTools() };
-}
+    if (toolName is null)
+        return Error("Tool name missing");
 
-object HandleResourcesList()
-{
-    return new
-    {
-        resources = new object[]
-        {
-            new
-            {
-                uri = "memory://recent",
-                name = "Recent Memories",
-                description = "List of recently added memories",
-                mimeType = "application/json"
-            },
-            new
-            {
-                uri = "memory://sessions",
-                name = "Conversation Sessions",
-                description = "List of recent conversation sessions",
-                mimeType = "application/json"
-            }
-        }
-    };
-}
+    logger.LogInformation("→ Forwarding tool call: {Tool}", toolName);
 
-async Task<object> HandleToolsCall(JsonNode? @params)
-{
-    var toolName = @params?["name"]?.GetValue<string>();
-    var arguments = @params?["arguments"];
-
-    if (string.IsNullOrEmpty(toolName))
-    {
-        return CreateErrorResponse("Tool name is required");
-    }
-
-    logger.LogInformation("Forwarding tool call: {Tool}", toolName);
-
-    try
-    {
-        return await ForwardToApi($"mcp/tools/{toolName}", arguments);
-    }
-    catch (HttpRequestException ex)
-    {
-        logger.LogError(ex, "API request failed for tool {Tool}", toolName);
-        return CreateErrorResponse($"API request failed: {ex.Message}");
-    }
-    catch (TaskCanceledException)
-    {
-        return CreateErrorResponse("Request timed out");
-    }
-}
-
-async Task<object> ForwardToApi(string path, JsonNode? payload)
-{
-    var json = payload?.ToJsonString() ?? "{}";
-    var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-    var response = await httpClient.PostAsync($"/api/{path}", content);
-
-    var responseBody = await response.Content.ReadAsStringAsync();
+    var content = new StringContent(args?.ToJsonString() ?? "{}", Encoding.UTF8, "application/json");
+    var response = await httpClient.PostAsync($"/api/{basePath}/{toolName}", content);
+    var body = await response.Content.ReadAsStringAsync();
 
     if (!response.IsSuccessStatusCode)
-    {
-        logger.LogWarning("API error {Status}: {Body}", response.StatusCode, responseBody);
+        return Error(body);
 
-        // Try to extract error message from response
-        try
-        {
-            var errorObj = JsonNode.Parse(responseBody);
-            var errorMessage = errorObj?["error"]?.GetValue<string>()
-                            ?? errorObj?["message"]?.GetValue<string>()
-                            ?? responseBody;
-            return CreateErrorResponse(errorMessage);
-        }
-        catch
-        {
-            return CreateErrorResponse($"API error {(int)response.StatusCode}: {responseBody}");
-        }
-    }
+    // If already MCP response
+    if (JsonNode.Parse(body)?["content"] is not null)
+        return JsonSerializer.Deserialize<object>(body, jsonOptions)!;
 
-    // Parse and return the API response
-    try
-    {
-        var result = JsonNode.Parse(responseBody);
-
-        // If API returns MCP-formatted response, use it directly
-        if (result?["content"] != null)
-        {
-            return JsonSerializer.Deserialize<object>(responseBody, jsonOptions)!;
-        }
-
-        // Otherwise wrap in MCP text response
-        return CreateTextResponse(responseBody);
-    }
-    catch
-    {
-        return CreateTextResponse(responseBody);
-    }
-}
-
-object CreateTextResponse(string text)
-{
+    // Wrap plain JSON/text
     return new
     {
         content = new[]
         {
-            new { type = "text", text }
+            new { type = "text", text = body }
         }
     };
 }
 
-object CreateErrorResponse(string message)
-{
-    return new
+object Error(string message) =>
+    new
     {
+        isError = true,
         content = new[]
         {
             new { type = "text", text = $"Error: {message}" }
-        },
-        isError = true
+        }
     };
-}
-
-#endregion
