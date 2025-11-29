@@ -2,7 +2,7 @@
 # This is a standalone client with NO backend dependencies
 
 # Build stage
-FROM mcr.microsoft.com/dotnet/sdk:10.0-preview AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy project file
