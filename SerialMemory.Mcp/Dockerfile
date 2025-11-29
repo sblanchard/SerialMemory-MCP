@@ -21,7 +21,7 @@ RUN dotnet publish \
     --output /app/publish
 
 # Runtime stage - using slim runtime image
-FROM mcr.microsoft.com/dotnet/runtime:10.0-preview-alpine AS runtime
+FROM mcr.microsoft.com/dotnet/runtime:10.0 AS runtime
 WORKDIR /app
 
 # Copy published app
