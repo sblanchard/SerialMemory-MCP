@@ -68,3 +68,210 @@ Set two required environment variables:
 ```bash
 export SERIALMEMORY_ENDPOINT="https://api.serialmemory.dev"
 export SERIALMEMORY_API_KEY="your-api-key"
+
+Windows (PowerShell)
+
+setx SERIALMEMORY_ENDPOINT "https://api.serialmemory.dev"
+setx SERIALMEMORY_API_KEY "your-api-key"
+
+Get your key from:
+👉 https://serialmemory.dev/dashboard
+
+▶️ Running
+Direct exe / binary
+./serialmemory-mcp
+
+Docker
+docker run -it \
+  -e SERIALMEMORY_ENDPOINT="https://api.serialmemory.dev" \
+  -e SERIALMEMORY_API_KEY="your-api-key" \
+  serialcoder/serialmemory-mcp:latest
+
+🔌 MCP Integration
+Claude Desktop
+
+Edit:
+
+~/Library/Application Support/Claude/claude_desktop_config.json
+
+Add:
+
+{
+  "mcpServers": {
+    "serialmemory": {
+      "command": "/path/to/serialmemory-mcp"
+    }
+  }
+}
+
+
+Restart Claude → tools appear automatically.
+
+Cursor
+
+Edit:
+
+~/.cursor/mcp.json
+
+{
+  "serialmemory": {
+    "command": "/path/to/serialmemory-mcp"
+  }
+}
+
+Kilo Code (MCP IDE)
+
+Add to:
+
+~/.kilocode/mcp.json
+
+{
+  "servers": {
+    "serialmemory": {
+      "command": "/path/to/serialmemory-mcp"
+    }
+  }
+}
+
+
+Restart Kilo Code → SerialMemory tools appear in the MCP panel.
+
+🧩 Available Tools
+
+From SerialMemory.Mcp/Tools/ToolDefinitions.cs.
+
+Tool	Description
+memory.search	Hybrid search over your memory graph
+memory.add	Add a memory
+memory.update	Update a memory
+memory.delete	Hard or soft delete
+memory.list_recent	Recent memory activity
+session.list	List conversation sessions
+graph.query	Query entity & relationship graph
+
+All calls are forwarded to the SerialMemory backend.
+
+🏗 Development
+git clone https://github.com/sblanchard/SerialMemory-MCP
+cd SerialMemory-MCP
+dotnet build
+dotnet run --project SerialMemory.Mcp
+
+
+Project structure:
+
+SerialMemory-MCP/
+ ├── SerialMemory.Mcp/
+ │    ├── Program.cs
+ │    ├── Dockerfile
+ │    └── Tools/
+ │         └── ToolDefinitions.cs
+ ├── README.md
+ └── docs/
+      ├── index.md
+      └── tools.md
+
+🔐 Security
+
+No local storage
+
+No caching
+
+No credential persistence
+
+Uses secure API tokens
+
+Forwards only to your tenant via SerialMemory Cloud
+
+No access to local files or other system processes
+
+Safe for: workplace use, multi-tenant SAAS, and production teams
+
+📚 Documentation
+/docs/index.md
+# SerialMemory MCP Documentation
+
+Welcome to the docs for the SerialMemory MCP client.
+
+## Contents
+- Tool API
+- Configuration
+- MCP Integration (Claude, Cursor, Kilo Code)
+- Security Notes
+
+/docs/tools.md
+# Public MCP Tools
+
+## memory.search
+Hybrid vector + keyword search.
+
+## memory.add
+Insert a structured memory.
+
+## memory.list_recent
+Recent created memories.
+
+## session.list
+Conversation sessions.
+
+## graph.query
+Entity graph queries.
+
+📦 Dockerfile
+FROM mcr.microsoft.com/dotnet/runtime:10.0
+WORKDIR /app
+COPY . .
+ENTRYPOINT ["./serialmemory-mcp"]
+
+🗒 CHANGELOG
+v1.0.0 — Initial Release (2025-11-29)
+
+Complete MCP specification support
+
+Lightweight proxy-only architecture
+
+Claude/Cursor/Kilo Code support
+
+API-key authentication
+
+Docker image
+
+Cross-platform binaries
+
+📣 Support
+
+Issues: https://github.com/sblanchard/SerialMemory-MCP/issues
+
+Website: https://serialmemory.dev
+
+Email: support@serialmemory.dev
+
+📜 License
+
+MIT License.
+
+
+---
+
+# ✅ Done
+
+Everything is now in **one giant markdown block**, ready to paste into GitHub.
+
+If you want:
+
+🔥 A docs microsite (`docs.serialmemory.dev`)  
+🔥 Automatic GitHub Actions build + release pipeline  
+🔥 Homebrew package + Winget package  
+🔥 Auto-update support for clients  
+
+Say **“Generate CI/CD package”**.
+
+
+
+
+
+
+
+
+
+
