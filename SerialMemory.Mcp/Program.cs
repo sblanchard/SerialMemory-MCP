@@ -10,7 +10,7 @@ using SerialMemory.Mcp.Tools;
 // ============================================================================
 // SerialMemory MCP Client - PUBLIC DISTRIBUTION BUILD
 // ============================================================================
- 
+
 var configuration = new ConfigurationBuilder()
     .AddJsonFile("appsettings.json", optional: true)
     .AddEnvironmentVariables()
@@ -22,7 +22,8 @@ var apiKey = configuration["SERIALMEMORY_API_KEY"];
 
 if (string.IsNullOrWhiteSpace(apiEndpoint))
 {
-    Console.Error.WriteLine("[MCP Error] Missing SERIALMEMORY_ENDPOINT");
+    await Console.Error.WriteLineAsync("[MCP Error] SERIALMEMORY_ENDPOINT is required (e.g., https://api.serialmemory.dev)");
+    Environment.Exit(1);
     return;
 }
 
@@ -55,7 +56,8 @@ logger.LogInformation("SerialMemory MCP Client starting → {Endpoint}", apiEndp
 // JSON Options --------------------------------------------------------------
 var jsonOptions = new JsonSerializerOptions
 {
-    PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    WriteIndented = false,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
 };
 
@@ -83,23 +85,20 @@ while (await reader.ReadLineAsync() is { } line)
                 serverInfo = new { name = "serialmemory-mcp", version = "1.0.0" },
                 capabilities = new { tools = new { }, resources = new { } }
             },
-
+            "notifications/initialized" => null,
             "shutdown" => null,
             "exit" => Environment.Exit(0),
-
             "tools/list" => new { tools = ToolDefinitions.GetAllTools() },
-
             "resources/list" => new
             {
                 resources = new object[]
                 {
-                    new { uri="memory://recent", name="Recent Memories", mimeType="application/json" },
-                    new { uri="memory://sessions", name="Conversation Sessions", mimeType="application/json" }
+                    new { uri = "memory://recent", name = "Recent Memories", mimeType = "application/json" },
+                    new { uri = "memory://sessions", name = "Conversation Sessions", mimeType = "application/json" }
                 }
             },
-
-            "tools/call" => await ForwardToApi("mcp/tools", @params),
-
+            "resources/read" => await ForwardToApi("resources/read", "POST", @params),
+            "tools/call" => await HandleToolsCall(@params),
             _ => null
         };
 
@@ -122,19 +121,109 @@ while (await reader.ReadLineAsync() is { } line)
     }
 }
 
-// Forwarding Logic ----------------------------------------------------------
-async Task<object> ForwardToApi(string basePath, JsonNode? payload)
+// Tool Call Handler ---------------------------------------------------------
+async Task<object> HandleToolsCall(JsonNode? @params)
 {
-    var toolName = payload?["name"]?.GetValue<string>();
-    var args = payload?["arguments"];
+    var toolName = @params?["name"]?.GetValue<string>();
+    var arguments = @params?["arguments"];
 
-    if (toolName is null)
-        return Error("Tool name missing");
+    if (string.IsNullOrEmpty(toolName))
+        return Error("Tool name is required");
 
     logger.LogInformation("→ Forwarding tool call: {Tool}", toolName);
 
-    var content = new StringContent(args?.ToJsonString() ?? "{}", Encoding.UTF8, "application/json");
-    var response = await httpClient.PostAsync($"/api/{basePath}/{toolName}", content);
+    try
+    {
+        var route = GetToolRoute(toolName);
+        if (route == null)
+            return Error($"Unknown tool: {toolName}");
+
+        return await ForwardToApi(route.Value.path, route.Value.method, arguments);
+    }
+    catch (HttpRequestException ex)
+    {
+        logger.LogError(ex, "API request failed for tool {Tool}", toolName);
+        return Error($"API request failed: {ex.Message}");
+    }
+    catch (TaskCanceledException)
+    {
+        return Error("Request timed out");
+    }
+}
+
+// Tool Routing --------------------------------------------------------------
+(string path, string method)? GetToolRoute(string toolName) => toolName switch
+{
+    // Core tools
+    "memory_search" => ("memories/search", "GET"),
+    "memory_ingest" => ("memories", "POST"),
+    "memory_about_user" => ("persona", "GET"),
+    "initialise_conversation_session" => ("sessions", "POST"),
+    "end_conversation_session" => ("sessions/current/end", "POST"),
+    "memory_multi_hop_search" => ("memories/multi-hop", "GET"),
+    "get_integrations" => ("integrations", "GET"),
+    "import_from_core" => ("import/core", "POST"),
+    "set_user_persona" => ("persona", "POST"),
+    "crawl_relationships" => ("relationships/discover", "POST"),
+    "get_graph_statistics" => ("stats", "GET"),
+    "get_model_info" => ("llm/config", "GET"),
+    "reembed_memories" => ("jobs/reembed", "POST"),
+
+    // Lifecycle tools
+    "memory_update" => ("power/memory/update", "POST"),
+    "memory_delete" => ("power/memory/delete", "POST"),
+    "memory_merge" => ("power/memory/merge", "POST"),
+    "memory_split" => ("power/memory/split", "POST"),
+    "memory_decay" => ("jobs/decay", "POST"),
+    "memory_reinforce" => ("power/memory/reinforce", "POST"),
+    "memory_expire" => ("power/memory/expire", "POST"),
+
+    // Observability tools
+    "memory_trace" => ("power/trace", "GET"),
+    "memory_lineage" => ("power/lineage", "GET"),
+    "memory_explain" => ("power/explain", "GET"),
+    "memory_conflicts" => ("power/conflicts", "GET"),
+
+    // Safety tools
+    "detect_contradictions" => ("mind/contradictions", "GET"),
+    "detect_hallucinations" => ("mind/hallucinations", "GET"),
+    "verify_memory_integrity" => ("integrity/verify-all", "POST"),
+    "scan_loops" => ("integrity/scan-loops", "GET"),
+
+    // Export tools
+    "export_workspace" => ("export/workspace", "POST"),
+    "export_memories" => ("export/memories", "POST"),
+    "export_graph" => ("export/graph", "POST"),
+    "export_user_profile" => ("export/user-profile", "POST"),
+
+    // Reasoning tools
+    "engineering_analyze" => ("reasoning/run", "POST"),
+    "engineering_visualize" => ("visualize/graph", "GET"),
+    "engineering_reason" => ("reasoning/start", "POST"),
+
+    _ => null
+};
+
+// API Forwarding ------------------------------------------------------------
+async Task<object> ForwardToApi(string path, string method, JsonNode? payload)
+{
+    HttpResponseMessage response;
+
+    if (method == "GET")
+    {
+        var queryString = BuildQueryString(payload);
+        var url = string.IsNullOrEmpty(queryString) ? $"/api/{path}" : $"/api/{path}?{queryString}";
+        logger.LogDebug("GET {Url}", url);
+        response = await httpClient.GetAsync(url);
+    }
+    else
+    {
+        var json = payload?.ToJsonString() ?? "{}";
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        logger.LogDebug("POST /api/{Path} with {Json}", path, json);
+        response = await httpClient.PostAsync($"/api/{path}", content);
+    }
+
     var body = await response.Content.ReadAsStringAsync();
 
     if (!response.IsSuccessStatusCode)
@@ -152,6 +241,28 @@ async Task<object> ForwardToApi(string basePath, JsonNode? payload)
             new { type = "text", text = body }
         }
     };
+}
+
+string BuildQueryString(JsonNode? payload)
+{
+    if (payload is not JsonObject obj)
+        return "";
+
+    var parts = new List<string>();
+    foreach (var prop in obj)
+    {
+        if (prop.Value == null) continue;
+
+        var value = prop.Value switch
+        {
+            JsonValue v => v.ToString(),
+            _ => prop.Value.ToJsonString()
+        };
+
+        parts.Add($"{Uri.EscapeDataString(prop.Key)}={Uri.EscapeDataString(value)}");
+    }
+
+    return string.Join("&", parts);
 }
 
 object Error(string message) =>
