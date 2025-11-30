@@ -17,7 +17,6 @@ COPY . .
 # Build and publish
 RUN dotnet publish \
     --configuration Release \
-    --no-restore \
     --output /app/publish
 
 # Runtime stage - using slim runtime image
