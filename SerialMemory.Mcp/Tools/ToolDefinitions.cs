@@ -20,7 +20,7 @@ public static class ToolDefinitions
         .. GetReasoningTools()
     ];
 
-    public static object[] GetCoreTools() =>
+    private static object[] GetCoreTools() =>
     [
         // memory_search
         new
@@ -254,7 +254,7 @@ public static class ToolDefinitions
         }
     ];
 
-    public static object[] GetLifecycleTools() =>
+    private static object[] GetLifecycleTools() =>
     [
         new
         {
@@ -377,7 +377,7 @@ public static class ToolDefinitions
         }
     ];
 
-    public static object[] GetObservabilityTools() =>
+    private static object[] GetObservabilityTools() =>
     [
         new
         {
@@ -440,7 +440,7 @@ public static class ToolDefinitions
         }
     ];
 
-    public static object[] GetSafetyTools() =>
+    private static object[] GetSafetyTools() =>
     [
         new
         {
@@ -505,7 +505,7 @@ public static class ToolDefinitions
         }
     ];
 
-    public static object[] GetExportTools() =>
+    private static object[] GetExportTools() =>
     [
         new
         {
@@ -576,7 +576,7 @@ public static class ToolDefinitions
         }
     ];
 
-    public static object[] GetReasoningTools() =>
+    private static object[] GetReasoningTools() =>
     [
         new
         {

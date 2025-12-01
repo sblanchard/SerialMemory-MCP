@@ -34,7 +34,7 @@ if (string.IsNullOrWhiteSpace(apiKey))
 }
 
 // HTTP Client ---------------------------------------------------------------
-using var httpClient = new HttpClient
+var httpClient = new HttpClient
 {
     BaseAddress = new Uri(apiEndpoint),
     Timeout = TimeSpan.FromSeconds(120)
@@ -63,7 +63,8 @@ var jsonOptions = new JsonSerializerOptions
 
 // MCP STDIO Loop ------------------------------------------------------------
 using var reader = new StreamReader(Console.OpenStandardInput());
-using var writer = new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
+await using var writer = new StreamWriter(Console.OpenStandardOutput());
+writer.AutoFlush = true;
 
 while (await reader.ReadLineAsync() is { } line)
 {
@@ -77,6 +78,9 @@ while (await reader.ReadLineAsync() is { } line)
         var method = req?["method"]?.GetValue<string>();
         var @params = req?["params"];
 
+        if (method == "exit")
+            Environment.Exit(0);
+
         object? result = method switch
         {
             "initialize" => new
@@ -87,7 +91,6 @@ while (await reader.ReadLineAsync() is { } line)
             },
             "notifications/initialized" => null,
             "shutdown" => null,
-            "exit" => Environment.Exit(0),
             "tools/list" => new { tools = ToolDefinitions.GetAllTools() },
             "resources/list" => new
             {
