@@ -28,14 +28,13 @@ COPY --from=build /app/publish .
 
 # Set environment variables
 ENV DOTNET_EnableDiagnostics=0
-ENV ASPNETCORE_URLS=http://+:4545;https://+:4546
 
 # Required environment variables (set at runtime):
 # - SERIALMEMORY_ENDPOINT: API endpoint URL
 # - SERIALMEMORY_API_KEY: API key for authentication
 
-# Expose HTTP and HTTPS ports
-EXPOSE 4545 4546
+# Expose HTTP port (use reverse proxy like Cloudflare for HTTPS)
+EXPOSE 4545
 
 # Run in HTTP-only mode for Docker (no stdio)
 ENTRYPOINT ["dotnet", "SerialMemory.Mcp.dll", "--http-only"]

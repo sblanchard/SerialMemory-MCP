@@ -44,8 +44,8 @@ var httpOnly = args.Contains("--http-only");
 
 if (!httpOnly)
 {
-    // Start HTTP server in background
-    _ = Task.Run(() => RunHttpServer(mcpHandler, logger));
+    // Start HTTP server in background (localhost only for security)
+    _ = Task.Run(() => RunHttpServer(mcpHandler, logger, bindToAny: false));
 
     // Run stdio transport in foreground
     logger.LogInformation("SerialMemory MCP Client starting → {Endpoint} (stdio + HTTP :4545 + HTTPS :4546)", apiEndpoint);
@@ -53,9 +53,9 @@ if (!httpOnly)
 }
 else
 {
-    // HTTP-only mode
-    logger.LogInformation("SerialMemory MCP Client starting → {Endpoint} (HTTP :4545 + HTTPS :4546)", apiEndpoint);
-    await RunHttpServer(mcpHandler, logger);
+    // HTTP-only mode - bind to all interfaces for Docker
+    logger.LogInformation("SerialMemory MCP Client starting → {Endpoint} (HTTP :4545 on 0.0.0.0)", apiEndpoint);
+    await RunHttpServer(mcpHandler, logger, bindToAny: true);
 }
 
 // STDIO Transport (for Claude Code)
@@ -84,16 +84,25 @@ async Task RunStdioTransport(McpHandler handler, ILogger log)
 }
 
 // HTTP Transport (for ChatGPT)
-async Task RunHttpServer(McpHandler handler, ILogger log)
+async Task RunHttpServer(McpHandler handler, ILogger log, bool bindToAny)
 {
     var builder = WebApplication.CreateBuilder();
     builder.Logging.ClearProviders();
 
-    // Suppress Kestrel startup logs to avoid interfering with stdio
+    // Configure Kestrel binding
     builder.WebHost.ConfigureKestrel(options =>
     {
-        options.ListenLocalhost(4545); // HTTP
-        options.ListenLocalhost(4546, listenOptions => listenOptions.UseHttps()); // HTTPS
+        if (bindToAny)
+        {
+            // Docker/server mode - HTTP only (use reverse proxy for HTTPS)
+            options.ListenAnyIP(4545);
+        }
+        else
+        {
+            // Local mode - localhost only for security
+            options.ListenLocalhost(4545); // HTTP
+            options.ListenLocalhost(4546, listenOptions => listenOptions.UseHttps()); // HTTPS
+        }
     });
 
     var app = builder.Build();
