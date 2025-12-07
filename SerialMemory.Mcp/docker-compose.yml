@@ -1,0 +1,24 @@
+services:
+  serialmemory-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: serialmemory-mcp
+    ports:
+      - "4545:4545"   # HTTP
+      - "4546:4546"   # HTTPS
+    environment:
+      - SERIALMEMORY_ENDPOINT=${SERIALMEMORY_ENDPOINT:-https://api.serialmemory.dev}
+      - SERIALMEMORY_API_KEY=${SERIALMEMORY_API_KEY}
+      - ASPNETCORE_URLS=http://+:4545;https://+:4546
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=/app/certs/cert.pfx
+      - ASPNETCORE_Kestrel__Certificates__Default__Password=${CERT_PASSWORD:-}
+    volumes:
+      - ./certs:/app/certs:ro  # Mount SSL certificates (optional)
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4545/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
