@@ -44,6 +44,8 @@ public sealed class McpHandler
         var method = req?["method"]?.GetValue<string>();
         var @params = req?["params"];
 
+        _logger.LogInformation("← MCP request: {Method}", method);
+
         if (method == "exit")
         {
             Environment.Exit(0);
@@ -56,7 +58,11 @@ public sealed class McpHandler
             {
                 protocolVersion = "2024-11-05",
                 serverInfo = new { name = "serialmemory-mcp", version = "1.0.0" },
-                capabilities = new { tools = new { }, resources = new { } }
+                capabilities = new
+                {
+                    tools = new { listChanged = true },
+                    resources = new { listChanged = true }
+                }
             },
             "notifications/initialized" => null,
             "shutdown" => null,
@@ -190,8 +196,9 @@ public sealed class McpHandler
         if (!response.IsSuccessStatusCode)
             return Error(body);
 
-        // If already MCP response
-        if (JsonNode.Parse(body)?["content"] is not null)
+        // If already MCP response (check it's an object first)
+        var parsed = JsonNode.Parse(body);
+        if (parsed is JsonObject obj && obj["content"] is not null)
             return JsonSerializer.Deserialize<object>(body, _jsonOptions)!;
 
         // Wrap plain JSON/text

@@ -20,6 +20,10 @@ public static class ToolDefinitions
         .. GetReasoningTools()
     ];
 
+    // Annotation helpers
+    private static object ReadOnly => new { readOnlyHint = true };
+    private static object Destructive => new { destructiveHint = true };
+
     private static object[] GetCoreTools() =>
     [
         // memory_search
@@ -27,6 +31,7 @@ public static class ToolDefinitions
         {
             name = "memory_search",
             description = "Search for relevant memories using semantic search, full-text search, or both. Returns memories with entities and temporal context.",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -64,6 +69,7 @@ public static class ToolDefinitions
         {
             name = "memory_about_user",
             description = "Retrieve structured information about the user's persona, preferences, skills, goals, and background.",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -105,6 +111,7 @@ public static class ToolDefinitions
         {
             name = "memory_multi_hop_search",
             description = "Perform multi-hop reasoning by traversing the knowledge graph. Finds initial memories, then follows entity relationships.",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -122,6 +129,7 @@ public static class ToolDefinitions
         {
             name = "get_integrations",
             description = "List available integrations (external tools/APIs).",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -220,6 +228,7 @@ public static class ToolDefinitions
         {
             name = "get_graph_statistics",
             description = "Get statistics about the knowledge graph including entity and relationship counts by type.",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -231,6 +240,7 @@ public static class ToolDefinitions
         {
             name = "get_model_info",
             description = "Get information about the current embedding model (name, dimensions, supported models, export instructions).",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -277,6 +287,7 @@ public static class ToolDefinitions
         {
             name = "memory_delete",
             description = "Soft delete (invalidate) a memory. No hard deletes - memory remains for audit. Creates MemoryInvalidated event.",
+            annotations = Destructive,
             inputSchema = new
             {
                 type = "object",
@@ -383,6 +394,7 @@ public static class ToolDefinitions
         {
             name = "memory_trace",
             description = "Get complete event history for a memory. Shows all mutations in chronological order.",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -398,6 +410,7 @@ public static class ToolDefinitions
         {
             name = "memory_lineage",
             description = "Trace causal ancestry and descendants of a memory through causal_parents relationships.",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -414,6 +427,7 @@ public static class ToolDefinitions
         {
             name = "memory_explain",
             description = "Explain current state of a memory - why it's active/inactive, confidence calculations, relationships, and recommendations.",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -428,6 +442,7 @@ public static class ToolDefinitions
         {
             name = "memory_conflicts",
             description = "Find all conflicts/contradictions involving a memory or list all unresolved conflicts.",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -446,6 +461,7 @@ public static class ToolDefinitions
         {
             name = "detect_contradictions",
             description = "Find memories that contradict each other using semantic similarity and content analysis.",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -462,6 +478,7 @@ public static class ToolDefinitions
         {
             name = "detect_hallucinations",
             description = "Flag potential hallucinations based on confidence, validation status, access patterns, and isolation.",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -478,6 +495,7 @@ public static class ToolDefinitions
         {
             name = "verify_memory_integrity",
             description = "Verify content hash integrity for memories. Detects content corruption.",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -493,6 +511,7 @@ public static class ToolDefinitions
         {
             name = "scan_loops",
             description = "Detect cycles in causal parent relationships (loop detection). Cycles can cause infinite recursion.",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -582,6 +601,7 @@ public static class ToolDefinitions
         {
             name = "engineering_analyze",
             description = "Analyze the knowledge graph for engineering insights. Detects power integrity issues (voltage mismatch, overcurrent), signal integrity issues (clock/protocol mismatch), dependency corruption (cascading failures), and thermal risks.",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -596,6 +616,7 @@ public static class ToolDefinitions
         {
             name = "engineering_visualize",
             description = "Generate graph visualization data with nodes, links, and reasoning overlays. Returns JSON suitable for react-force-graph-3d rendering.",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
@@ -612,6 +633,7 @@ public static class ToolDefinitions
         {
             name = "engineering_reason",
             description = "Run multi-model reasoning on the knowledge graph. Executes multiple reasoning models in parallel (Structural, Risk, Optimization, Contradiction) and merges results by confidence and agreement. Returns traced insights with source model attribution.",
+            annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
