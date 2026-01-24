@@ -106,6 +106,25 @@ public static class ToolDefinitions
                 properties = new { }
             }
         },
+        // instantiate_context
+        new
+        {
+            name = "instantiate_context",
+            description = "Instantiate a context for the current conversation. Loads relevant memories, user persona, and session state to prime the assistant with contextual knowledge.",
+            annotations = ReadOnly,
+            inputSchema = new
+            {
+                type = "object",
+                properties = new
+                {
+                    session_id = new { type = "string", description = "Optional session ID to load context from" },
+                    include_user_persona = new { type = "boolean", @default = true, description = "Include user persona attributes" },
+                    include_recent_memories = new { type = "boolean", @default = true, description = "Include recent memories" },
+                    memory_limit = new { type = "integer", @default = 20, description = "Maximum number of memories to include" },
+                    context_hint = new { type = "string", description = "Optional hint to guide context selection (e.g., 'coding', 'project X')" }
+                }
+            }
+        },
         // memory_multi_hop_search
         new
         {

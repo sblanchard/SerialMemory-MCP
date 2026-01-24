@@ -128,6 +128,7 @@ public sealed class McpHandler
         "memory_about_user" => ("persona", "GET"),
         "initialise_conversation_session" => ("sessions", "POST"),
         "end_conversation_session" => ("sessions/current/end", "POST"),
+        "instantiate_context" => ("context/instantiate", "GET"),
         "memory_multi_hop_search" => ("memories/multi-hop", "GET"),
         "get_integrations" => ("integrations", "GET"),
         "import_from_core" => ("import/core", "POST"),
