@@ -110,18 +110,17 @@ public static class ToolDefinitions
         new
         {
             name = "instantiate_context",
-            description = "Instantiate a context for the current conversation. Loads relevant memories, user persona, and session state to prime the assistant with contextual knowledge.",
+            description = "Retrieve and summarize memories from the previous day(s) to continue where you left off. Use at the start of a new session to get context from prior work. Optionally filter by project or subject for relevant context only.",
             annotations = ReadOnly,
             inputSchema = new
             {
                 type = "object",
                 properties = new
                 {
-                    session_id = new { type = "string", description = "Optional session ID to load context from" },
-                    include_user_persona = new { type = "boolean", @default = true, description = "Include user persona attributes" },
-                    include_recent_memories = new { type = "boolean", @default = true, description = "Include recent memories" },
-                    memory_limit = new { type = "integer", @default = 20, description = "Maximum number of memories to include" },
-                    context_hint = new { type = "string", description = "Optional hint to guide context selection (e.g., 'coding', 'project X')" }
+                    project_or_subject = new { type = "string", description = "Optional project name or subject to filter memories (e.g., 'FlexPilot', 'waterfall rendering'). Uses semantic search to find relevant memories." },
+                    days_back = new { type = "integer", @default = 3, description = "Number of days to look back (default: 3)" },
+                    limit = new { type = "integer", @default = 50, description = "Maximum memories to retrieve" },
+                    include_entities = new { type = "boolean", @default = true, description = "Include linked entities and relationships" }
                 }
             }
         },
