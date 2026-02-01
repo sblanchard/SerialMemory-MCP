@@ -168,12 +168,43 @@ ENTRYPOINT ["./serialmemory-mcp"]
 
 ---
 
+## 🔧 Troubleshooting
+
+### Mac: SSE Transport Authentication Fails
+
+**Error:**
+```
+HTTP 404: Invalid OAuth error response: SyntaxError: JSON Parse error: Unexpected EOF. Raw body:
+```
+
+**Cause:** The MCP SDK on Mac with SSE transport performs OAuth discovery, hitting `/.well-known/oauth-authorization-server`. If this returns 404 with an empty body, JSON parsing fails.
+
+**Solution:** Use `http` transport instead of `sse`:
+
+```json
+{
+  "mcpServers": {
+    "serialmemory": {
+      "type": "http",
+      "url": "https://mcp.serialmemory.dev/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_API_KEY"
+      }
+    }
+  }
+}
+```
+
+This works on all platforms (Windows, Linux, macOS).
+
+---
+
 ## 🔐 Security
 
-- No local storage  
-- No embeddings  
-- No database access  
-- Pure HTTPS proxy  
+- No local storage
+- No embeddings
+- No database access
+- Pure HTTPS proxy
 - Safe in enterprise environments  
 
 ---

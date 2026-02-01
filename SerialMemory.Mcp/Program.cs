@@ -110,6 +110,11 @@ async Task RunHttpServer(McpHandler handler, ILogger log, bool bindToAny)
     // Health check
     app.MapGet("/", () => Results.Ok(new { status = "ok", service = "serialmemory-mcp", version = "1.0.0" }));
 
+    // OAuth discovery endpoint - returns proper JSON for clients that probe for OAuth support
+    // Fixes Mac SSE transport issue where MCP SDK expects JSON response from OAuth discovery
+    app.MapGet("/.well-known/oauth-authorization-server", () =>
+        Results.NotFound(new { error = "oauth_not_supported", message = "This server uses Bearer token authentication" }));
+
     // MCP over HTTP endpoint
     app.MapPost("/mcp", async ctx =>
     {
