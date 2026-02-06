@@ -36,8 +36,11 @@ using var loggerFactory = LoggerFactory.Create(builder =>
 });
 var logger = loggerFactory.CreateLogger("SerialMemory.Mcp");
 
+// Lazy-MCP mode (default: true, set LAZY_MCP_ENABLED=false to disable)
+var lazyMcpEnabled = configuration["LAZY_MCP_ENABLED"]?.ToLowerInvariant() is not ("false" or "0" or "no");
+
 // Shared MCP handler
-var mcpHandler = new McpHandler(apiEndpoint, apiKey, logger);
+var mcpHandler = new McpHandler(apiEndpoint, apiKey, logger, lazyMcpEnabled);
 
 // Check if running interactively (stdio) or as HTTP server only
 var httpOnly = args.Contains("--http-only");

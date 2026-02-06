@@ -8,7 +8,7 @@ namespace SerialMemory.Mcp.Tools;
 public static class ToolDefinitions
 {
     /// <summary>
-    /// Returns all tool definitions for MCP tools/list response.
+    /// Returns all tool definitions for MCP tools/list response (full mode).
     /// </summary>
     public static object[] GetAllTools() =>
     [
@@ -19,6 +19,130 @@ public static class ToolDefinitions
         .. GetExportTools(),
         .. GetReasoningTools()
     ];
+
+    /// <summary>
+    /// Returns only core tools + meta-tools for lazy-MCP mode.
+    /// Saves ~84% of tool listing overhead.
+    /// </summary>
+    public static object[] GetLazyTools()
+    {
+        var core = GetCoreTools();
+        var lazyToolNames = new HashSet<string> { "memory_search", "memory_ingest", "memory_multi_hop_search", "memory_about_user" };
+        var lazyCore = core.Where(t => lazyToolNames.Contains(((dynamic)t).name)).ToArray();
+        return [.. lazyCore, .. GetMetaTools()];
+    }
+
+    public static object[] GetMetaTools() =>
+    [
+        new
+        {
+            name = "get_tools_in_category",
+            description = "Browse available SerialMemory tools by category. Call with no path for root categories. Categories: lifecycle, observability, safety, export, reasoning, session, admin.",
+            annotations = ReadOnly,
+            inputSchema = new
+            {
+                type = "object",
+                properties = new
+                {
+                    path = new { type = "string", description = "Category path (empty for root, e.g. 'lifecycle', 'safety')" }
+                }
+            }
+        },
+        new
+        {
+            name = "execute_tool",
+            description = "Execute a SerialMemory tool by its category path. Use get_tools_in_category first to discover tools and their parameters.",
+            inputSchema = new
+            {
+                type = "object",
+                properties = new
+                {
+                    tool_path = new { type = "string", description = "Tool path (e.g. 'lifecycle.memory_update', 'safety.detect_contradictions')" },
+                    arguments = new { type = "object", description = "Tool arguments as JSON object" }
+                },
+                required = new[] { "tool_path" }
+            }
+        }
+    ];
+
+    /// <summary>
+    /// Category metadata for lazy-MCP browsing.
+    /// </summary>
+    public static readonly Dictionary<string, (string Title, string Description)> Categories = new()
+    {
+        ["lifecycle"] = ("Memory Lifecycle", "Update, delete, merge, split, decay, reinforce, expire, supersede memories"),
+        ["observability"] = ("Observability", "Trace event history, lineage, explain state, find conflicts"),
+        ["safety"] = ("Safety & Integrity", "Detect contradictions, hallucinations, verify hashes, scan loops"),
+        ["export"] = ("Export", "Export workspace, memories, graph, user profile, markdown vault"),
+        ["reasoning"] = ("Engineering Reasoning", "Analyze graphs, visualize, multi-model reasoning"),
+        ["session"] = ("Session Management", "Create/end sessions, instantiate context"),
+        ["admin"] = ("Administration", "Persona, integrations, import, crawl, statistics, model info, reembed")
+    };
+
+    /// <summary>
+    /// Map category.tool_name → actual tool name for dispatch.
+    /// </summary>
+    public static readonly Dictionary<string, string> ToolMap = new()
+    {
+        ["lifecycle.memory_update"] = "memory_update",
+        ["lifecycle.memory_delete"] = "memory_delete",
+        ["lifecycle.memory_merge"] = "memory_merge",
+        ["lifecycle.memory_split"] = "memory_split",
+        ["lifecycle.memory_decay"] = "memory_decay",
+        ["lifecycle.memory_reinforce"] = "memory_reinforce",
+        ["lifecycle.memory_expire"] = "memory_expire",
+        ["lifecycle.memory_supersede"] = "memory_supersede",
+        ["observability.memory_trace"] = "memory_trace",
+        ["observability.memory_lineage"] = "memory_lineage",
+        ["observability.memory_explain"] = "memory_explain",
+        ["observability.memory_conflicts"] = "memory_conflicts",
+        ["safety.detect_contradictions"] = "detect_contradictions",
+        ["safety.detect_hallucinations"] = "detect_hallucinations",
+        ["safety.verify_memory_integrity"] = "verify_memory_integrity",
+        ["safety.scan_loops"] = "scan_loops",
+        ["export.export_workspace"] = "export_workspace",
+        ["export.export_memories"] = "export_memories",
+        ["export.export_graph"] = "export_graph",
+        ["export.export_user_profile"] = "export_user_profile",
+        ["export.export_markdown"] = "export_markdown",
+        ["reasoning.engineering_analyze"] = "engineering_analyze",
+        ["reasoning.engineering_visualize"] = "engineering_visualize",
+        ["reasoning.engineering_reason"] = "engineering_reason",
+        ["session.initialise_conversation_session"] = "initialise_conversation_session",
+        ["session.end_conversation_session"] = "end_conversation_session",
+        ["session.instantiate_context"] = "instantiate_context",
+        ["admin.set_user_persona"] = "set_user_persona",
+        ["admin.get_integrations"] = "get_integrations",
+        ["admin.import_from_core"] = "import_from_core",
+        ["admin.crawl_relationships"] = "crawl_relationships",
+        ["admin.get_graph_statistics"] = "get_graph_statistics",
+        ["admin.get_model_info"] = "get_model_info",
+        ["admin.reembed_memories"] = "reembed_memories"
+    };
+
+    /// <summary>
+    /// Returns tool definitions for a given category.
+    /// </summary>
+    public static object[] GetToolsForCategory(string category) => category.ToLowerInvariant() switch
+    {
+        "lifecycle" => GetLifecycleTools(),
+        "observability" => GetObservabilityTools(),
+        "safety" => GetSafetyTools(),
+        "export" => GetExportTools(),
+        "reasoning" => GetReasoningTools(),
+        "session" => FilterByName(GetCoreTools(),
+            "initialise_conversation_session", "end_conversation_session", "instantiate_context"),
+        "admin" => FilterByName(GetCoreTools(),
+            "set_user_persona", "get_integrations", "import_from_core",
+            "crawl_relationships", "get_graph_statistics", "get_model_info", "reembed_memories"),
+        _ => []
+    };
+
+    private static object[] FilterByName(object[] tools, params string[] names)
+    {
+        var nameSet = new HashSet<string>(names);
+        return tools.Where(t => nameSet.Contains(((dynamic)t).name)).ToArray();
+    }
 
     // Annotation helpers
     private static object ReadOnly => new { readOnlyHint = true };
@@ -59,7 +183,9 @@ public static class ToolDefinitions
                     content = new { type = "string", description = "Memory content to store" },
                     source = new { type = "string", description = "Source of the memory (e.g., 'claude-desktop', 'cursor')" },
                     metadata = new { type = "object", description = "Additional metadata (tags, importance, etc.)" },
-                    extract_entities = new { type = "boolean", @default = true, description = "Whether to extract entities and relationships" }
+                    extract_entities = new { type = "boolean", @default = true, description = "Whether to extract entities and relationships" },
+                    dedup_mode = new { type = "string", @enum = new[] { "warn", "skip", "append", "off" }, @default = "warn", description = "Dedup mode: warn (create+report), skip (reject if dup), append (merge into existing), off (no check)" },
+                    dedup_threshold = new { type = "number", @default = 0.85, description = "Similarity threshold for duplicate detection (0.0-1.0)" }
                 },
                 required = new[] { "content" }
             }
@@ -403,6 +529,24 @@ public static class ToolDefinitions
                 },
                 required = new[] { "memory_id" }
             }
+        },
+        new
+        {
+            name = "memory_supersede",
+            description = "Replace a memory with new content. Creates new memory, invalidates old, links via causal_parents and superseded_by.",
+            inputSchema = new
+            {
+                type = "object",
+                properties = new
+                {
+                    old_memory_id = new { type = "string", description = "UUID of memory to supersede" },
+                    new_content = new { type = "string", description = "New replacement content" },
+                    reason = new { type = "string", description = "Why superseding" },
+                    extract_entities = new { type = "boolean", @default = true, description = "Extract entities from new content" },
+                    actor_id = new { type = "string", description = "Actor ID" }
+                },
+                required = new[] { "old_memory_id", "new_content" }
+            }
         }
     ];
 
@@ -608,6 +752,24 @@ public static class ToolDefinitions
                     user_id = new { type = "string", @default = "default_user", description = "User ID to export" },
                     output_path = new { type = "string", description = "Output file path" },
                     include_interactions = new { type = "boolean", @default = false, description = "Include interaction history" }
+                }
+            }
+        },
+        new
+        {
+            name = "export_markdown",
+            description = "Export as Obsidian-compatible Markdown vault with wikilinks, YAML frontmatter, and folder organization.",
+            inputSchema = new
+            {
+                type = "object",
+                properties = new
+                {
+                    output_path = new { type = "string", description = "Output directory (default: serial_memory_vault)" },
+                    active_only = new { type = "boolean", @default = true, description = "Only export active memories" },
+                    include_entities = new { type = "boolean", @default = true, description = "Include entity pages" },
+                    include_sessions = new { type = "boolean", @default = true, description = "Include session summaries" },
+                    min_confidence = new { type = "number", @default = 0.0, description = "Minimum confidence filter (0.0-1.0)" },
+                    group_by = new { type = "string", @enum = new[] { "month", "layer", "source" }, @default = "month", description = "How to group memory files" }
                 }
             }
         }
