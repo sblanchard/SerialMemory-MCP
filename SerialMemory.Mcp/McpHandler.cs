@@ -145,17 +145,16 @@ public sealed class McpHandler
             return new { content = new[] { new { type = "text", text } } };
         }
 
-        if (!ToolDefinitions.Categories.ContainsKey(path))
+        if (!ToolDefinitions.Categories.TryGetValue(path, out var categoryInfo))
             return Error($"Unknown category: {path}. Available: {string.Join(", ", ToolDefinitions.Categories.Keys)}");
 
         var tools = ToolDefinitions.GetToolsForCategory(path);
-        var info2 = ToolDefinitions.Categories[path];
         var json = JsonSerializer.Serialize(tools, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
         return new
         {
             content = new[]
             {
-                new { type = "text", text = $"## {info2.Title}\n{info2.Description}\n\n**{tools.Length} tools available.** Use `execute_tool` with path `{path}.<tool_name>` to execute.\n\n{json}" }
+                new { type = "text", text = $"## {categoryInfo.Title}\n{categoryInfo.Description}\n\n**{tools.Length} tools available.** Use `execute_tool` with path `{path}.<tool_name>` to execute.\n\n{json}" }
             }
         };
     }
@@ -177,7 +176,19 @@ public sealed class McpHandler
         if (route == null)
             return Error($"No API route for tool: {actualToolName}");
 
-        return await ForwardToApi(route.Value.path, route.Value.method, toolArguments);
+        try
+        {
+            return await ForwardToApi(route.Value.path, route.Value.method, toolArguments);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "API request failed for tool {Tool} via execute_tool", actualToolName);
+            return Error($"API request failed: {ex.Message}");
+        }
+        catch (TaskCanceledException)
+        {
+            return Error("Request timed out");
+        }
     }
 
     private static (string path, string method)? GetToolRoute(string toolName) => toolName switch

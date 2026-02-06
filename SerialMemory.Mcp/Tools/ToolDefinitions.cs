@@ -27,8 +27,9 @@ public static class ToolDefinitions
     public static object[] GetLazyTools()
     {
         var core = GetCoreTools();
-        // Only expose: memory_search, memory_ingest, memory_multi_hop_search, memory_about_user
-        return [core[0], core[1], core[2], core[6], .. GetMetaTools()];
+        var lazyToolNames = new HashSet<string> { "memory_search", "memory_ingest", "memory_multi_hop_search", "memory_about_user" };
+        var lazyCore = core.Where(t => lazyToolNames.Contains(((dynamic)t).name)).ToArray();
+        return [.. lazyCore, .. GetMetaTools()];
     }
 
     public static object[] GetMetaTools() =>
@@ -129,10 +130,19 @@ public static class ToolDefinitions
         "safety" => GetSafetyTools(),
         "export" => GetExportTools(),
         "reasoning" => GetReasoningTools(),
-        "session" => GetCoreTools()[3..6],  // session-related core tools
-        "admin" => GetCoreTools()[7..],      // admin-related core tools
+        "session" => FilterByName(GetCoreTools(),
+            "initialise_conversation_session", "end_conversation_session", "instantiate_context"),
+        "admin" => FilterByName(GetCoreTools(),
+            "set_user_persona", "get_integrations", "import_from_core",
+            "crawl_relationships", "get_graph_statistics", "get_model_info", "reembed_memories"),
         _ => []
     };
+
+    private static object[] FilterByName(object[] tools, params string[] names)
+    {
+        var nameSet = new HashSet<string>(names);
+        return tools.Where(t => nameSet.Contains(((dynamic)t).name)).ToArray();
+    }
 
     // Annotation helpers
     private static object ReadOnly => new { readOnlyHint = true };
@@ -523,7 +533,7 @@ public static class ToolDefinitions
         new
         {
             name = "memory_supersede",
-            description = "Atomically replace a memory with new content. Creates new memory, invalidates old, links via causal_parents and superseded_by.",
+            description = "Replace a memory with new content. Creates new memory, invalidates old, links via causal_parents and superseded_by.",
             inputSchema = new
             {
                 type = "object",
