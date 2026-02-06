@@ -13,10 +13,12 @@ public sealed class McpHandler
     private readonly HttpClient _httpClient;
     private readonly ILogger _logger;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly bool _lazyMcpEnabled;
 
-    public McpHandler(string apiEndpoint, string apiKey, ILogger logger)
+    public McpHandler(string apiEndpoint, string apiKey, ILogger logger, bool lazyMcpEnabled = true)
     {
         _logger = logger;
+        _lazyMcpEnabled = lazyMcpEnabled;
         _httpClient = new HttpClient
         {
             BaseAddress = new Uri(apiEndpoint),
@@ -66,7 +68,7 @@ public sealed class McpHandler
             },
             "notifications/initialized" => null,
             "shutdown" => null,
-            "tools/list" => new { tools = ToolDefinitions.GetAllTools() },
+            "tools/list" => new { tools = _lazyMcpEnabled ? ToolDefinitions.GetLazyTools() : ToolDefinitions.GetAllTools() },
             "resources/list" => new
             {
                 resources = new object[]
@@ -101,6 +103,13 @@ public sealed class McpHandler
 
         _logger.LogInformation("→ Forwarding tool call: {Tool}", toolName);
 
+        // Handle meta-tools locally
+        if (toolName == "get_tools_in_category")
+            return HandleGetToolsInCategory(arguments);
+
+        if (toolName == "execute_tool")
+            return await HandleExecuteTool(arguments);
+
         try
         {
             var route = GetToolRoute(toolName);
@@ -118,6 +127,57 @@ public sealed class McpHandler
         {
             return Error("Request timed out");
         }
+    }
+
+    private object HandleGetToolsInCategory(JsonNode? arguments)
+    {
+        var path = arguments?["path"]?.GetValue<string>()?.Trim()?.ToLowerInvariant() ?? "";
+
+        if (string.IsNullOrEmpty(path))
+        {
+            var text = "## SerialMemory Tool Categories\n\n";
+            foreach (var (key, info) in ToolDefinitions.Categories)
+            {
+                var toolCount = ToolDefinitions.ToolMap.Keys.Count(k => k.StartsWith(key + "."));
+                text += $"- **{key}** ({toolCount} tools) — {info.Description}\n";
+            }
+            text += "\nUse `get_tools_in_category` with a category name to see available tools.";
+            return new { content = new[] { new { type = "text", text } } };
+        }
+
+        if (!ToolDefinitions.Categories.ContainsKey(path))
+            return Error($"Unknown category: {path}. Available: {string.Join(", ", ToolDefinitions.Categories.Keys)}");
+
+        var tools = ToolDefinitions.GetToolsForCategory(path);
+        var info2 = ToolDefinitions.Categories[path];
+        var json = JsonSerializer.Serialize(tools, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        return new
+        {
+            content = new[]
+            {
+                new { type = "text", text = $"## {info2.Title}\n{info2.Description}\n\n**{tools.Length} tools available.** Use `execute_tool` with path `{path}.<tool_name>` to execute.\n\n{json}" }
+            }
+        };
+    }
+
+    private async Task<object> HandleExecuteTool(JsonNode? arguments)
+    {
+        var toolPath = arguments?["tool_path"]?.GetValue<string>()?.Trim()?.ToLowerInvariant();
+        if (string.IsNullOrEmpty(toolPath))
+            return Error("tool_path is required (e.g. 'lifecycle.memory_update')");
+
+        if (!ToolDefinitions.ToolMap.TryGetValue(toolPath, out var actualToolName))
+            return Error($"Unknown tool path: {toolPath}. Use get_tools_in_category to discover available tools.");
+
+        var toolArguments = arguments?["arguments"];
+
+        _logger.LogInformation("→ execute_tool: {Path} → {Tool}", toolPath, actualToolName);
+
+        var route = GetToolRoute(actualToolName);
+        if (route == null)
+            return Error($"No API route for tool: {actualToolName}");
+
+        return await ForwardToApi(route.Value.path, route.Value.method, toolArguments);
     }
 
     private static (string path, string method)? GetToolRoute(string toolName) => toolName switch
@@ -146,6 +206,7 @@ public sealed class McpHandler
         "memory_decay" => ("jobs/decay", "POST"),
         "memory_reinforce" => ("power/memory/reinforce", "POST"),
         "memory_expire" => ("power/memory/expire", "POST"),
+        "memory_supersede" => ("power/memory/supersede", "POST"),
 
         // Observability tools
         "memory_trace" => ("power/trace", "GET"),
@@ -164,6 +225,7 @@ public sealed class McpHandler
         "export_memories" => ("export/memories", "POST"),
         "export_graph" => ("export/graph", "POST"),
         "export_user_profile" => ("export/user-profile", "POST"),
+        "export_markdown" => ("export/markdown", "POST"),
 
         // Reasoning tools
         "engineering_analyze" => ("reasoning/run", "POST"),
