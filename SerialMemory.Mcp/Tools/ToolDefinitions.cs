@@ -17,7 +17,9 @@ public static class ToolDefinitions
         .. GetObservabilityTools(),
         .. GetSafetyTools(),
         .. GetExportTools(),
-        .. GetReasoningTools()
+        .. GetReasoningTools(),
+        .. GetWorkspaceTools(),
+        .. GetGatewayTools()
     ];
 
     /// <summary>
@@ -37,7 +39,7 @@ public static class ToolDefinitions
         new
         {
             name = "get_tools_in_category",
-            description = "Browse available SerialMemory tools by category. Call with no path for root categories. Categories: lifecycle, observability, safety, export, reasoning, session, admin.",
+            description = "Browse available SerialMemory tools by category. Call with no path for root categories. Categories: lifecycle, observability, safety, export, reasoning, session, admin, workspace.",
             annotations = ReadOnly,
             inputSchema = new
             {
@@ -76,7 +78,8 @@ public static class ToolDefinitions
         ["export"] = ("Export", "Export workspace, memories, graph, user profile, markdown vault"),
         ["reasoning"] = ("Engineering Reasoning", "Analyze graphs, visualize, multi-model reasoning"),
         ["session"] = ("Session Management", "Create/end sessions, instantiate context"),
-        ["admin"] = ("Administration", "Persona, integrations, import, crawl, statistics, model info, reembed")
+        ["admin"] = ("Administration", "Persona, integrations, import, crawl, statistics, model info, reembed"),
+        ["workspace"] = ("Workspace & Snapshots", "Create/switch workspaces, create/load state snapshots")
     };
 
     /// <summary>
@@ -117,7 +120,13 @@ public static class ToolDefinitions
         ["admin.crawl_relationships"] = "crawl_relationships",
         ["admin.get_graph_statistics"] = "get_graph_statistics",
         ["admin.get_model_info"] = "get_model_info",
-        ["admin.reembed_memories"] = "reembed_memories"
+        ["admin.reembed_memories"] = "reembed_memories",
+        ["workspace.workspace_create"] = "workspace_create",
+        ["workspace.workspace_list"] = "workspace_list",
+        ["workspace.workspace_switch"] = "workspace_switch",
+        ["workspace.snapshot_create"] = "snapshot_create",
+        ["workspace.snapshot_list"] = "snapshot_list",
+        ["workspace.snapshot_load"] = "snapshot_load"
     };
 
     /// <summary>
@@ -135,6 +144,7 @@ public static class ToolDefinitions
         "admin" => FilterByName(GetCoreTools(),
             "set_user_persona", "get_integrations", "import_from_core",
             "crawl_relationships", "get_graph_statistics", "get_model_info", "reembed_memories"),
+        "workspace" => GetWorkspaceTools(),
         _ => []
     };
 
@@ -530,6 +540,7 @@ public static class ToolDefinitions
                 required = new[] { "memory_id" }
             }
         },
+        // memory_supersede
         new
         {
             name = "memory_supersede",
@@ -755,6 +766,7 @@ public static class ToolDefinitions
                 }
             }
         },
+        // export_markdown
         new
         {
             name = "export_markdown",
@@ -823,6 +835,149 @@ public static class ToolDefinitions
                     project = new { type = "string", description = "Optional: filter reasoning to entities connected to this project name" },
                     max_duration_ms = new { type = "integer", @default = 30000, description = "Maximum reasoning time in milliseconds (default: 30000)" }
                 }
+            }
+        }
+    ];
+
+    private static object[] GetWorkspaceTools() =>
+    [
+        new
+        {
+            name = "workspace_create",
+            description = "Create a new workspace for scoping memories and sessions.",
+            inputSchema = new
+            {
+                type = "object",
+                properties = new
+                {
+                    name = new { type = "string", description = "Workspace slug identifier (e.g., 'my-project')" },
+                    display_name = new { type = "string", description = "Human-readable display name" },
+                    description = new { type = "string", description = "Workspace description" }
+                },
+                required = new[] { "name" }
+            }
+        },
+        new
+        {
+            name = "workspace_list",
+            description = "List all workspaces for the current tenant.",
+            annotations = ReadOnly,
+            inputSchema = new
+            {
+                type = "object",
+                properties = new
+                {
+                    limit = new { type = "integer", @default = 50, description = "Maximum workspaces to return" }
+                }
+            }
+        },
+        new
+        {
+            name = "workspace_switch",
+            description = "Switch the active workspace for this MCP session. All subsequent operations will be scoped to the new workspace.",
+            inputSchema = new
+            {
+                type = "object",
+                properties = new
+                {
+                    workspace_id = new { type = "string", description = "Workspace slug to switch to" }
+                },
+                required = new[] { "workspace_id" }
+            }
+        },
+        new
+        {
+            name = "snapshot_create",
+            description = "Create a named state snapshot of the current workspace. Captures recent memories, active entities, session state, and custom metadata.",
+            inputSchema = new
+            {
+                type = "object",
+                properties = new
+                {
+                    snapshot_name = new { type = "string", description = "Unique name for this snapshot (e.g., 'checkpoint-1')" },
+                    goal = new { type = "string", description = "Current goal to capture" },
+                    constraints = new { type = "string", description = "Current constraints to capture" },
+                    memory = new { type = "string", description = "Conversation essence to capture" },
+                    metadata = new { type = "object", description = "Custom metadata to include" }
+                },
+                required = new[] { "snapshot_name" }
+            }
+        },
+        new
+        {
+            name = "snapshot_list",
+            description = "List snapshots for a workspace.",
+            annotations = ReadOnly,
+            inputSchema = new
+            {
+                type = "object",
+                properties = new
+                {
+                    workspace_id = new { type = "string", description = "Workspace to list snapshots for (defaults to current)" },
+                    limit = new { type = "integer", @default = 20, description = "Maximum snapshots to return" }
+                }
+            }
+        },
+        new
+        {
+            name = "snapshot_load",
+            description = "Load a named snapshot and return its captured state data for context restoration.",
+            annotations = ReadOnly,
+            inputSchema = new
+            {
+                type = "object",
+                properties = new
+                {
+                    snapshot_name = new { type = "string", description = "Name of the snapshot to load" },
+                    workspace_id = new { type = "string", description = "Workspace to load from (defaults to current)" }
+                },
+                required = new[] { "snapshot_name" }
+            }
+        }
+    ];
+
+    private static object[] GetGatewayTools() =>
+    [
+        new
+        {
+            name = "get_tools",
+            description = "Discover available SerialMemory tools by category. Returns tool schemas and descriptions. Categories: lifecycle, observability, safety, export, reasoning, admin, session, workspace.",
+            annotations = ReadOnly,
+            inputSchema = new
+            {
+                type = "object",
+                properties = new
+                {
+                    category = new { type = "string", description = "Filter by category (omit for category listing)" }
+                }
+            }
+        },
+        new
+        {
+            name = "use_tool",
+            description = "Execute a SerialMemory tool by name. Use get_tools first to discover available tools and their parameters.",
+            inputSchema = new
+            {
+                type = "object",
+                properties = new
+                {
+                    tool_name = new { type = "string", description = "Name of the tool to execute" },
+                    arguments = new { type = "object", description = "Tool arguments" },
+                    context = new
+                    {
+                        type = "object",
+                        description = "Optional per-call context envelope",
+                        properties = new
+                        {
+                            workspace_id = new { type = "string", description = "Override workspace for this call" },
+                            session_id = new { type = "string", description = "Override session for this call" },
+                            memory = new { type = "string", description = "1-3 sentence conversation essence" },
+                            goal = new { type = "string", description = "Current objective" },
+                            constraints = new { type = "string", description = "Rules or limits" }
+                        }
+                    }
+                },
+                required = new[] { "tool_name" }
             }
         }
     ];

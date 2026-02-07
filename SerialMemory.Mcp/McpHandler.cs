@@ -243,6 +243,20 @@ public sealed class McpHandler
         "engineering_visualize" => ("visualize/graph", "GET"),
         "engineering_reason" => ("reasoning/start", "POST"),
 
+        // Workspace tools
+        "workspace_create" => ("workspaces", "POST"),
+        "workspace_list" => ("workspaces", "GET"),
+        "workspace_switch" => ("workspaces/switch", "POST"),
+
+        // Snapshot tools
+        "snapshot_create" => ("snapshots", "POST"),
+        "snapshot_list" => ("snapshots", "GET"),
+        "snapshot_load" => ("snapshots/load", "GET"),
+
+        // Gateway tools
+        "get_tools" => ("tools/discover", "GET"),
+        "use_tool" => ("tools/execute", "POST"),
+
         _ => null
     };
 
