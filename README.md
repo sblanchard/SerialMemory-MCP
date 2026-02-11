@@ -186,7 +186,7 @@ HTTP 404: Invalid OAuth error response: SyntaxError: JSON Parse error: Unexpecte
   "mcpServers": {
     "serialmemory": {
       "type": "http",
-      "url": "https://mcp.serialmemory.dev/mcp",
+      "url": "http://localhost:4545/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_API_KEY"
       }
