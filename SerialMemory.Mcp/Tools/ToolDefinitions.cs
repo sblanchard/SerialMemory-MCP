@@ -9,33 +9,39 @@ public static class ToolDefinitions
 {
     /// <summary>
     /// Returns all tool definitions for MCP tools/list response (full mode).
+    /// Cached after first call to eliminate ~5-10KB allocations per request.
     /// </summary>
+    private static object[]? _allToolsCache;
     public static object[] GetAllTools() =>
-    [
-        .. GetCoreTools(),
-        .. GetLifecycleTools(),
-        .. GetObservabilityTools(),
-        .. GetSafetyTools(),
-        .. GetExportTools(),
-        .. GetReasoningTools(),
-        .. GetWorkspaceTools(),
-        .. GetGatewayTools()
-    ];
+        _allToolsCache ??= [
+            .. GetCoreTools(),
+            .. GetLifecycleTools(),
+            .. GetObservabilityTools(),
+            .. GetSafetyTools(),
+            .. GetExportTools(),
+            .. GetReasoningTools(),
+            .. GetWorkspaceTools(),
+            .. GetGatewayTools()
+        ];
 
     /// <summary>
     /// Returns only core tools + meta-tools for lazy-MCP mode.
-    /// Saves ~84% of tool listing overhead.
+    /// Cached after first call — eliminates dynamic/DLR overhead on every request.
     /// </summary>
-    public static object[] GetLazyTools()
+    private static object[]? _lazyToolsCache;
+    public static object[] GetLazyTools() =>
+        _lazyToolsCache ??= BuildLazyTools();
+
+    private static object[] BuildLazyTools()
     {
-        var core = GetCoreTools();
         var lazyToolNames = new HashSet<string> { "memory_search", "memory_ingest", "memory_multi_hop_search", "memory_about_user" };
-        var lazyCore = core.Where(t => lazyToolNames.Contains(((dynamic)t).name)).ToArray();
+        var lazyCore = GetCoreTools().Where(t => lazyToolNames.Contains(((dynamic)t).name)).ToArray();
         return [.. lazyCore, .. GetMetaTools()];
     }
 
+    private static object[]? _metaToolsCache;
     public static object[] GetMetaTools() =>
-    [
+        _metaToolsCache ??= [
         new
         {
             name = "get_tools_in_category",
@@ -65,7 +71,7 @@ public static class ToolDefinitions
                 required = new[] { "tool_path" }
             }
         }
-    ];
+        ];
 
     /// <summary>
     /// Category metadata for lazy-MCP browsing.
@@ -130,8 +136,20 @@ public static class ToolDefinitions
     };
 
     /// <summary>
-    /// Returns tool definitions for a given category.
+    /// Pre-computed tool counts per category (eliminates linear scan of ToolMap keys per category).
     /// </summary>
+    private static Dictionary<string, int>? _toolCountsCache;
+    public static Dictionary<string, int> GetToolCountsByCategory() =>
+        _toolCountsCache ??= Categories.Keys.ToDictionary(
+            key => key,
+            key => ToolMap.Keys.Count(k => k.StartsWith(key + ".", StringComparison.Ordinal)));
+
+    /// <summary>
+    /// Returns tool definitions for a given category.
+    /// Session and admin results are cached to avoid repeated dynamic/DLR lookups.
+    /// </summary>
+    private static object[]? _sessionToolsCache;
+    private static object[]? _adminToolsCache;
     public static object[] GetToolsForCategory(string category) => category.ToLowerInvariant() switch
     {
         "lifecycle" => GetLifecycleTools(),
@@ -139,9 +157,9 @@ public static class ToolDefinitions
         "safety" => GetSafetyTools(),
         "export" => GetExportTools(),
         "reasoning" => GetReasoningTools(),
-        "session" => FilterByName(GetCoreTools(),
+        "session" => _sessionToolsCache ??= FilterByName(GetCoreTools(),
             "initialise_conversation_session", "end_conversation_session", "instantiate_context"),
-        "admin" => FilterByName(GetCoreTools(),
+        "admin" => _adminToolsCache ??= FilterByName(GetCoreTools(),
             "set_user_persona", "get_integrations", "import_from_core",
             "crawl_relationships", "get_graph_statistics", "get_model_info", "reembed_memories"),
         "workspace" => GetWorkspaceTools(),
@@ -154,12 +172,13 @@ public static class ToolDefinitions
         return tools.Where(t => nameSet.Contains(((dynamic)t).name)).ToArray();
     }
 
-    // Annotation helpers
-    private static object ReadOnly => new { readOnlyHint = true };
-    private static object Destructive => new { destructiveHint = true };
+    // Annotation helpers (cached — previously created new objects on every tool array construction)
+    private static readonly object ReadOnly = new { readOnlyHint = true };
+    private static readonly object Destructive = new { destructiveHint = true };
 
+    private static object[]? _coreToolsCache;
     private static object[] GetCoreTools() =>
-    [
+        _coreToolsCache ??= [
         // memory_search
         new
         {
@@ -416,10 +435,11 @@ public static class ToolDefinitions
                 }
             }
         }
-    ];
+        ];
 
+    private static object[]? _lifecycleToolsCache;
     private static object[] GetLifecycleTools() =>
-    [
+        _lifecycleToolsCache ??= [
         new
         {
             name = "memory_update",
@@ -559,10 +579,11 @@ public static class ToolDefinitions
                 required = new[] { "old_memory_id", "new_content" }
             }
         }
-    ];
+        ];
 
+    private static object[]? _observabilityToolsCache;
     private static object[] GetObservabilityTools() =>
-    [
+        _observabilityToolsCache ??= [
         new
         {
             name = "memory_trace",
@@ -626,10 +647,11 @@ public static class ToolDefinitions
                 }
             }
         }
-    ];
+        ];
 
+    private static object[]? _safetyToolsCache;
     private static object[] GetSafetyTools() =>
-    [
+        _safetyToolsCache ??= [
         new
         {
             name = "detect_contradictions",
@@ -695,10 +717,11 @@ public static class ToolDefinitions
                 }
             }
         }
-    ];
+        ];
 
+    private static object[]? _exportToolsCache;
     private static object[] GetExportTools() =>
-    [
+        _exportToolsCache ??= [
         new
         {
             name = "export_workspace",
@@ -785,10 +808,11 @@ public static class ToolDefinitions
                 }
             }
         }
-    ];
+        ];
 
+    private static object[]? _reasoningToolsCache;
     private static object[] GetReasoningTools() =>
-    [
+        _reasoningToolsCache ??= [
         new
         {
             name = "engineering_analyze",
@@ -837,10 +861,11 @@ public static class ToolDefinitions
                 }
             }
         }
-    ];
+        ];
 
+    private static object[]? _workspaceToolsCache;
     private static object[] GetWorkspaceTools() =>
-    [
+        _workspaceToolsCache ??= [
         new
         {
             name = "workspace_create",
@@ -934,10 +959,11 @@ public static class ToolDefinitions
                 required = new[] { "snapshot_name" }
             }
         }
-    ];
+        ];
 
+    private static object[]? _gatewayToolsCache;
     private static object[] GetGatewayTools() =>
-    [
+        _gatewayToolsCache ??= [
         new
         {
             name = "get_tools",
@@ -980,5 +1006,5 @@ public static class ToolDefinitions
                 required = new[] { "tool_name" }
             }
         }
-    ];
+        ];
 }

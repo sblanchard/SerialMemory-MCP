@@ -6,6 +6,8 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using SerialMemory.Mcp.Tools;
 
+// ReSharper disable ArrangeObjectCreationWhenTypeNotEvident
+
 namespace SerialMemory.Mcp;
 
 public sealed class McpHandler
@@ -14,6 +16,13 @@ public sealed class McpHandler
     private readonly ILogger _logger;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly bool _lazyMcpEnabled;
+
+    // Reuse for category browse serialization (Microsoft docs: always reuse options instances)
+    private static readonly JsonSerializerOptions s_indentedJsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     public McpHandler(string apiEndpoint, string apiKey, ILogger logger, bool lazyMcpEnabled = true)
     {
@@ -47,12 +56,6 @@ public sealed class McpHandler
         var @params = req?["params"];
 
         _logger.LogInformation("← MCP request: {Method}", method);
-
-        if (method == "exit")
-        {
-            Environment.Exit(0);
-            return null;
-        }
 
         object? result = method switch
         {
@@ -121,7 +124,7 @@ public sealed class McpHandler
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "API request failed for tool {Tool}", toolName);
-            return Error($"API request failed: {ex.Message}");
+            return Error("API request failed");
         }
         catch (TaskCanceledException)
         {
@@ -135,13 +138,15 @@ public sealed class McpHandler
 
         if (string.IsNullOrEmpty(path))
         {
-            var text = "## SerialMemory Tool Categories\n\n";
+            var sb = new StringBuilder("## SerialMemory Tool Categories\n\n");
+            var toolCounts = ToolDefinitions.GetToolCountsByCategory();
             foreach (var (key, info) in ToolDefinitions.Categories)
             {
-                var toolCount = ToolDefinitions.ToolMap.Keys.Count(k => k.StartsWith(key + "."));
-                text += $"- **{key}** ({toolCount} tools) — {info.Description}\n";
+                var toolCount = toolCounts.GetValueOrDefault(key);
+                sb.Append($"- **{key}** ({toolCount} tools) — {info.Description}\n");
             }
-            text += "\nUse `get_tools_in_category` with a category name to see available tools.";
+            sb.Append("\nUse `get_tools_in_category` with a category name to see available tools.");
+            var text = sb.ToString();
             return new { content = new[] { new { type = "text", text } } };
         }
 
@@ -149,7 +154,7 @@ public sealed class McpHandler
             return Error($"Unknown category: {path}. Available: {string.Join(", ", ToolDefinitions.Categories.Keys)}");
 
         var tools = ToolDefinitions.GetToolsForCategory(path);
-        var json = JsonSerializer.Serialize(tools, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        var json = JsonSerializer.Serialize(tools, s_indentedJsonOptions);
         return new
         {
             content = new[]
@@ -183,7 +188,7 @@ public sealed class McpHandler
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "API request failed for tool {Tool} via execute_tool", actualToolName);
-            return Error($"API request failed: {ex.Message}");
+            return Error("API request failed");
         }
         catch (TaskCanceledException)
         {
@@ -282,12 +287,15 @@ public sealed class McpHandler
         var body = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)
-            return Error(body);
+        {
+            _logger.LogDebug("API error response ({StatusCode}): {Body}", (int)response.StatusCode, body);
+            return Error($"API returned status {(int)response.StatusCode}");
+        }
 
-        // If already MCP response (check it's an object first)
+        // If already MCP response format, pass through as JsonNode (avoids redundant deserialize+serialize)
         var parsed = JsonNode.Parse(body);
         if (parsed is JsonObject obj && obj["content"] is not null)
-            return JsonSerializer.Deserialize<object>(body, _jsonOptions)!;
+            return parsed;
 
         // Wrap plain JSON/text
         return new

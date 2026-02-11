@@ -12,3 +12,6 @@ obj/
 *.zip
 *.tar.gz
 .publish/
+appsettings.json
+appsettings.*.json
+.env

@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using SerialMemory.Mcp;
 
 // ============================================================================
@@ -39,6 +42,9 @@ var logger = loggerFactory.CreateLogger("SerialMemory.Mcp");
 // Lazy-MCP mode (default: true, set LAZY_MCP_ENABLED=false to disable)
 var lazyMcpEnabled = configuration["LAZY_MCP_ENABLED"]?.ToLowerInvariant() is not ("false" or "0" or "no");
 
+// Optional HTTP bearer token (if set, HTTP transport requires Authorization header)
+var mcpHttpToken = configuration["MCP_HTTP_TOKEN"];
+
 // Shared MCP handler
 var mcpHandler = new McpHandler(apiEndpoint, apiKey, logger, lazyMcpEnabled);
 
@@ -48,7 +54,7 @@ var httpOnly = args.Contains("--http-only");
 if (!httpOnly)
 {
     // Start HTTP server in background (localhost only for security)
-    _ = Task.Run(() => RunHttpServer(mcpHandler, logger, bindToAny: false));
+    _ = Task.Run(() => RunHttpServer(mcpHandler, logger, bindToAny: false, mcpHttpToken));
 
     // Run stdio transport in foreground
     logger.LogInformation("SerialMemory MCP Client starting → {Endpoint} (stdio + HTTP :4545 + HTTPS :4546)", apiEndpoint);
@@ -58,7 +64,7 @@ else
 {
     // HTTP-only mode - bind to all interfaces for Docker
     logger.LogInformation("SerialMemory MCP Client starting → {Endpoint} (HTTP :4545 on 0.0.0.0)", apiEndpoint);
-    await RunHttpServer(mcpHandler, logger, bindToAny: true);
+    await RunHttpServer(mcpHandler, logger, bindToAny: true, mcpHttpToken);
 }
 
 // STDIO Transport (for Claude Code)
@@ -81,20 +87,22 @@ async Task RunStdioTransport(McpHandler handler, ILogger log)
         catch (Exception ex)
         {
             log.LogError(ex, "MCP stdio request error");
-            await Console.Error.WriteLineAsync($"[MCP Error] {ex.Message}");
+            await Console.Error.WriteLineAsync("[MCP Error] Request processing failed");
         }
     }
 }
 
 // HTTP Transport (for ChatGPT)
-async Task RunHttpServer(McpHandler handler, ILogger log, bool bindToAny)
+async Task RunHttpServer(McpHandler handler, ILogger log, bool bindToAny, string? httpToken)
 {
     var builder = WebApplication.CreateBuilder();
     builder.Logging.ClearProviders();
 
-    // Configure Kestrel binding
+    // Configure Kestrel binding and request limits
     builder.WebHost.ConfigureKestrel(options =>
     {
+        options.Limits.MaxRequestBodySize = 1_048_576; // 1 MB
+
         if (bindToAny)
         {
             // Docker/server mode - HTTP only (use reverse proxy for HTTPS)
@@ -108,7 +116,64 @@ async Task RunHttpServer(McpHandler handler, ILogger log, bool bindToAny)
         }
     });
 
+    // CORS: restrict to localhost origins in local mode; Docker mode uses reverse proxy for CORS
+    if (!bindToAny)
+    {
+        builder.Services.AddCors(options =>
+        {
+            options.AddDefaultPolicy(policy =>
+            {
+                policy.SetIsOriginAllowed(origin =>
+                {
+                    if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+                        return false;
+                    return uri.Host == "localhost" || uri.Host == "127.0.0.1";
+                });
+                policy.AllowAnyHeader();
+                policy.AllowAnyMethod();
+            });
+        });
+    }
+
     var app = builder.Build();
+
+    if (!bindToAny)
+        app.UseCors();
+
+    // Bearer token authentication middleware (skips OAuth discovery endpoint)
+    if (!string.IsNullOrWhiteSpace(httpToken))
+    {
+        log.LogInformation("HTTP bearer token authentication enabled");
+        app.Use(async (ctx, next) =>
+        {
+            // OAuth discovery must remain unauthenticated per spec
+            if (ctx.Request.Path.StartsWithSegments("/.well-known"))
+            {
+                await next();
+                return;
+            }
+
+            var authHeader = ctx.Request.Headers.Authorization.ToString();
+            var providedToken = authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                ? authHeader["Bearer ".Length..]
+                : "";
+
+            var expected = Encoding.UTF8.GetBytes(httpToken);
+            var actual = Encoding.UTF8.GetBytes(providedToken);
+
+            if (!CryptographicOperations.FixedTimeEquals(expected, actual))
+            {
+                log.LogWarning("Unauthorized HTTP request from {RemoteIP}", ctx.Connection.RemoteIpAddress);
+                ctx.Response.StatusCode = 401;
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.WriteAsync(
+                    JsonSerializer.Serialize(new { error = "Unauthorized" }));
+                return;
+            }
+
+            await next();
+        });
+    }
 
     // Health check
     app.MapGet("/", () => Results.Ok(new { status = "ok", service = "serialmemory-mcp", version = "1.0.0" }));
@@ -142,7 +207,9 @@ async Task RunHttpServer(McpHandler handler, ILogger log, bool bindToAny)
         {
             log.LogError(ex, "MCP HTTP request error");
             ctx.Response.StatusCode = 500;
-            await ctx.Response.WriteAsync($"{{\"error\": \"{ex.Message}\"}}");
+            ctx.Response.ContentType = "application/json";
+            await ctx.Response.WriteAsync(
+                JsonSerializer.Serialize(new { error = "Internal server error" }));
         }
     });
 
