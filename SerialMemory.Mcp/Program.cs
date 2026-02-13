@@ -188,8 +188,41 @@ async Task RunHttpServer(McpHandler handler, ILogger log, bool bindToAny, string
     {
         try
         {
-            using var reader = new StreamReader(ctx.Request.Body);
-            var body = await reader.ReadToEndAsync();
+            // Enable buffering so the full body is read before processing.
+            // Without this, ReadToEndAsync on a chunked-transfer body can return
+            // partial data, causing JsonReaderException on large payloads.
+            ctx.Request.EnableBuffering();
+
+            using var ms = new MemoryStream();
+            await ctx.Request.Body.CopyToAsync(ms);
+            var bodyBytes = ms.ToArray();
+            var body = Encoding.UTF8.GetString(bodyBytes);
+
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                log.LogWarning("Empty MCP request body (Content-Length: {CL})",
+                    ctx.Request.ContentLength);
+                ctx.Response.StatusCode = 400;
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.WriteAsync("{\"error\":\"Empty request body\"}");
+                return;
+            }
+
+            // Validate JSON is complete before forwarding
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+            }
+            catch (JsonException ex)
+            {
+                log.LogWarning("Truncated MCP request body ({Bytes} bytes received, Content-Length: {CL}): {Error}",
+                    bodyBytes.Length, ctx.Request.ContentLength, ex.Message);
+                ctx.Response.StatusCode = 400;
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.WriteAsync(
+                    JsonSerializer.Serialize(new { error = "Malformed JSON in request body" }));
+                return;
+            }
 
             var response = await handler.HandleRequest(body);
 
