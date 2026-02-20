@@ -245,7 +245,7 @@ public sealed class McpHandler
 
         // Reasoning tools
         "engineering_analyze" => ("reasoning/run", "POST"),
-        "engineering_visualize" => ("visualize/graph", "GET"),
+        "engineering_visualize" => ("visualize/graph", "POST"),
         "engineering_reason" => ("reasoning/start", "POST"),
 
         // Workspace tools
